@@ -158,15 +158,8 @@ tracing, evaluation, and debugging of LLM pipelines.
 """
 
 
-
-
-
-
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_openai import OpenAIEmbeddings
-
-
-
 
 def batch_embed_with_chunks(
     text: str,
@@ -177,9 +170,6 @@ def batch_embed_with_chunks(
         chunk_size=chunk_size,
         chunk_overlap=overlap
     )
-
-
-
 
     chunks = splitter.split_text(text)
 
