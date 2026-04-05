@@ -424,3 +424,259 @@ def basic_rag_pipeline(documents: list, question: str) -> str:
 
     return chain.invoke(question)
    
+
+"""
+TASK 15: RAG with Source Attribution
+---------------------------------------
+Extend the RAG pipeline to also return the source documents
+used to generate the answer.  Return a dict:
+  {
+    "answer" : str,
+    "sources": [{"content": str, "score": float}, ...]
+  }
+
+
+HINT:
+  Use RunnableParallel to run retrieval and generation
+  in parallel, or retrieve docs first and pass them to both
+  the formatter and the chain:
+
+
+  from langchain_core.runnables import RunnableParallel, RunnablePassthrough
+
+
+  retrieval_chain = RunnableParallel(
+      {"context": retriever, "question": RunnablePassthrough()}
+  )
+  # Then use the context in both the answer chain and as sources.
+"""
+from langchain_core.runnables import RunnableParallel
+
+
+
+
+def rag_with_sources(documents: list, question: str) -> dict:
+    embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
+    docs = [Document(page_content=d) for d in documents]
+
+
+
+
+    store = PGVector.from_documents(
+        documents=docs,
+        embedding=embeddings,
+        collection_name="rag_sources",
+        connection_string=os.environ["PG_CONNECTION_STRING_RAW"],
+    )
+
+
+
+
+    retriever = store.as_retriever(search_kwargs={"k": 3})
+
+
+
+
+    def format_docs(docs):
+        return "\n\n".join(doc.page_content for doc in docs)
+
+
+
+
+    prompt = ChatPromptTemplate.from_template(
+        "Answer using only this context:\n{context}\n\nQuestion: {question}"
+    )
+
+
+
+
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
+
+
+
+
+    generation_chain = (
+        {"context": lambda x: format_docs(x["context"]), "question": lambda x: x["question"]}
+        | prompt
+        | llm
+        | StrOutputParser()
+    )
+
+
+
+
+    retrieval_chain = RunnableParallel(
+        {"context": retriever, "question": RunnablePassthrough()}
+    )
+
+
+
+
+    inputs = retrieval_chain.invoke(question)
+    answer = generation_chain.invoke(inputs)
+
+
+
+
+    sources = [
+        {"content": doc.page_content}
+        for doc in inputs["context"]
+    ]
+
+
+
+
+    return {"answer": answer, "sources": sources}
+
+
+"""
+TASK 16: Conversational RAG
+------------------------------
+Build a RAG pipeline that is aware of conversation history.
+
+
+Requirements:
+  - Use create_history_aware_retriever to rephrase follow-up
+    questions into standalone queries.
+  - Use create_retrieval_chain + create_stuff_documents_chain
+    to answer with context.
+  - Run a 2-turn conversation:
+      Turn 1: "What is LangChain?"
+      Turn 2: "What version introduced LCEL?"  ← follow-up
+  - Return both answers as a list: [answer1, answer2]
+
+
+HINT:
+  from langchain.chains import create_history_aware_retriever
+  from langchain.chains import create_retrieval_chain
+  from langchain.chains.combine_documents import create_stuff_documents_chain
+  from langchain_core.messages import HumanMessage, AIMessage
+
+
+  contextualize_prompt — asks the LLM to rephrase the question
+                         given history.
+  qa_prompt           — answers based on context + history.
+"""
+
+
+import os
+
+
+from langchain_openai import ChatOpenAI, OpenAIEmbeddings
+from langchain_community.vectorstores import PGVector
+from langchain_core.documents import Document
+from langchain_core.messages import HumanMessage, AIMessage
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.output_parsers import StrOutputParser
+from langchain_core.runnables import RunnablePassthrough, RunnableLambda
+
+
+
+
+def conversational_rag(documents: list) -> list:
+    """Returns [answer_turn1, answer_turn2] for a 2-turn RAG conversation."""
+
+
+    embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
+
+
+    docs = [Document(page_content=d) for d in documents]
+
+
+   
+    store = PGVector.from_documents(
+        documents=docs,
+        embedding=embeddings,
+        collection_name="rag_conversational",
+        connection_string=os.environ["PG_CONNECTION_STRING_RAW"],
+    )
+
+
+    retriever = store.as_retriever(search_kwargs={"k": 3})
+
+
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
+
+
+    rewrite_prompt = ChatPromptTemplate.from_template(
+        """
+Given the chat history and the follow-up question,
+rewrite the question so it is fully standalone.
+
+
+Chat History:
+{chat_history}
+
+
+Follow-up Question:
+{question}
+"""
+    )
+
+
+    rewrite_chain = (
+        rewrite_prompt
+        | llm
+        | StrOutputParser()
+    )
+
+
+    answer_prompt = ChatPromptTemplate.from_template(
+        """
+Answer the question using ONLY the context below.
+
+
+Context:
+{context}
+
+
+Question:
+{question}
+"""
+    )
+
+
+    def format_docs(docs):
+        return "\n\n".join(doc.page_content for doc in docs)
+
+
+    answer_chain = (
+        {
+            "context": retriever | RunnableLambda(format_docs),
+            "question": RunnablePassthrough(),
+        }
+        | answer_prompt
+        | llm
+        | StrOutputParser()
+    )
+
+
+    chat_history = []
+
+
+    question_1 = "What is LangChain?"
+    answer_1 = answer_chain.invoke(question_1)
+
+
+    chat_history.extend([
+        HumanMessage(content=question_1),
+        AIMessage(content=answer_1),
+    ])
+
+
+
+
+    follow_up = "What version introduced LCEL?"
+
+
+    standalone_question = rewrite_chain.invoke({
+        "question": follow_up,
+        "chat_history": chat_history,
+    })
+
+
+    answer_2 = answer_chain.invoke(standalone_question)
+
+
+    return [answer_1, answer_2]
+
