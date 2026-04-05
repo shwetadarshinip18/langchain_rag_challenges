@@ -42,18 +42,12 @@ RULES
 =============================================================
 """
 
-
 import os
 import numpy as np
 from dotenv import load_dotenv
 
-
 load_dotenv()
 
-
-# ─────────────────────────────────────────────────────────────
-# TASK 6 — Cosine Similarity (from scratch, then with numpy)
-# ─────────────────────────────────────────────────────────────
 """
 TASK 6: Cosine Similarity
 ---------------------------
@@ -83,75 +77,34 @@ HINT:
 
 import math
 
-
-
-
 def cosine_similarity_manual(v1: list, v2: list) -> float:
     """Computes cosine similarity using pure Python."""
     dot_product = sum(a * b for a, b in zip(v1, v2))
     magnitude_v1 = math.sqrt(sum(x * x for x in v1))
     magnitude_v2 = math.sqrt(sum(x * x for x in v2))
-
-
-
-
     if magnitude_v1 == 0 or magnitude_v2 == 0:
         return 0.0
-
-
-
-
     return dot_product / (magnitude_v1 * magnitude_v2)
 
-
-
-
 import numpy as np
-
-
 
 
 def cosine_similarity_numpy(v1: list, v2: list) -> float:
     """Computes cosine similarity using numpy."""
     v1 = np.array(v1)
     v2 = np.array(v2)
-
-
-
-
     return float(
         np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2))
     )
 
-
-
-
-
-
 from langchain_openai import OpenAIEmbeddings
-
-
-
-
 def compare_word_pairs() -> dict:
     embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
-
-
-
-
     dog = embeddings.embed_query("dog")
     puppy = embeddings.embed_query("puppy")
     automobile = embeddings.embed_query("automobile")
-
-
-
-
     sim_dog_puppy = cosine_similarity_numpy(dog, puppy)
     sim_dog_auto = cosine_similarity_numpy(dog, automobile)
-
-
-
-
     return {
         "dog_vs_puppy": sim_dog_puppy,
         "dog_vs_automobile": sim_dog_auto,
@@ -163,9 +116,6 @@ def compare_word_pairs() -> dict:
     }
 
 
-# ─────────────────────────────────────────────────────────────
-# TASK 7 — Batch Embedding with Chunking
-# ─────────────────────────────────────────────────────────────
 """
 TASK 7: Batch Embedding with Chunking
 ----------------------------------------
@@ -254,10 +204,6 @@ def batch_embed_with_chunks(
 
 
 
-
-# ─────────────────────────────────────────────────────────────
-# TASK 8 — Compare Two Embedding Models
-# ─────────────────────────────────────────────────────────────
 """
 TASK 8: Compare Two Embedding Models
 --------------------------------------
