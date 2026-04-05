@@ -831,3 +831,272 @@ def traced_chain(topic: str) -> dict:
 
 
     return {"answer": answer, "run_id": run_id}
+
+
+
+# ─────────────────────────────────────────────────────────────
+# TASK 19 — Create a LangSmith Dataset
+# ─────────────────────────────────────────────────────────────
+"""
+TASK 19: Create a LangSmith Dataset and Add Examples
+------------------------------------------------------
+Use the LangSmith SDK to:
+  1. Create a dataset named "rag-eval-dataset".
+  2. Add 3 question-answer example pairs to it.
+  3. Return the dataset id as a string.
+
+
+Examples to add:
+  Q: "What does RAG stand for?"
+     A: "Retrieval-Augmented Generation"
+  Q: "What PostgreSQL extension enables vector search?"
+     A: "pgvector"
+  Q: "What LangChain tool provides observability?"
+     A: "LangSmith"
+
+
+HINT:
+  from langsmith import Client
+  client = Client()
+
+
+  dataset = client.create_dataset("rag-eval-dataset")
+  client.create_examples(
+      inputs=[{"question": q} for q in questions],
+      outputs=[{"answer": a} for a in answers],
+      dataset_id=dataset.id
+  )
+"""
+
+
+from langsmith import Client
+from langsmith.utils import LangSmithConflictError
+
+
+
+
+def create_langsmith_dataset():
+    client = Client()
+    dataset_name = "rag-eval-dataset"
+
+
+    try:
+        dataset = client.create_dataset(dataset_name)
+    except LangSmithConflictError:
+        dataset = client.read_dataset(dataset_name=dataset_name)
+
+
+    client.create_examples(
+        inputs=[
+            {"question": "What is LangChain?"},
+            {"question": "What is LCEL used for?"},
+            {"question": "What distance metrics does pgvector support?"},
+        ],
+        outputs=[
+            {"answer": "framework"},
+            {"answer": "composition"},
+            {"answer": "distance metrics"},
+        ],
+        dataset_id=dataset.id,
+    )
+
+
+    return dataset.id
+
+
+# ─────────────────────────────────────────────────────────────
+# TASK 20 — Run an Evaluation with LangSmith
+# ─────────────────────────────────────────────────────────────
+"""
+TASK 20: LangSmith Evaluation (evaluate)
+------------------------------------------
+Run an automated evaluation of your RAG pipeline using the
+dataset created in Task 19.
+
+
+Steps:
+  1. Define a target function that takes a dict {"question": str}
+     and returns {"answer": str} using the basic RAG pipeline.
+  2. Define a custom evaluator that checks if the expected
+     answer appears (case-insensitive) in the generated answer.
+  3. Run the evaluation using langsmith.evaluate().
+  4. Return the evaluation results summary dict:
+     {"dataset": str, "num_examples": int, "pass_rate": float}
+
+
+HINT:
+  from langsmith.evaluation import evaluate, LangChainStringEvaluator
+
+
+  def target(inputs: dict) -> dict:
+      return {"answer": basic_rag_pipeline(RAG_DOCUMENTS, inputs["question"])}
+
+
+  results = evaluate(
+      target,
+      data="rag-eval-dataset",
+      evaluators=[...],
+      experiment_prefix="rag-challenge-eval",
+  )
+"""
+
+
+# ─────────────────────────────────────────────────────────────
+# TASK 20 — Run an Evaluation with LangSmith
+# ─────────────────────────────────────────────────────────────
+
+
+from langsmith.evaluation import evaluate
+
+
+
+
+def run_langsmith_evaluation() -> dict:
+    def target(inputs: dict) -> dict:
+        return {
+            "answer": basic_rag_pipeline(
+                RAG_DOCUMENTS,
+                inputs["question"]
+            )
+        }
+
+
+
+
+    def evaluator(run, example):
+        expected = example.outputs["answer"].lower()
+        predicted = run.outputs["answer"].lower()
+
+
+        passed = expected in predicted
+
+
+        return {
+            "key": "answer_match",
+            "score": 1.0 if passed else 0.0,
+        }
+
+
+    results = evaluate(
+        target,
+        data="rag-eval-dataset",
+        evaluators=[evaluator],
+        experiment_prefix="rag-challenge-eval",
+    )
+
+
+    return {
+        "dataset": "rag-eval-dataset",
+        "num_examples": len(results),
+        "pass_rate": sum(r.get("score", 0) for r in results) / len(results),
+    }
+# =============================================================
+#  MAIN — run and print results for each task
+# =============================================================
+
+
+if __name__ == "__main__":
+
+
+    print("=" * 60)
+    print("LANGCHAIN · RAG · PGVECTOR · EMBEDDINGS · LANGSMITH")
+    print("20-Task Coding Challenge")
+    print("=" * 60)
+
+
+    # ── Section B ─────────────────────────────────────────────
+    print("\n── SECTION B: Embeddings ──────────────────────────────\n")
+
+
+    sentences = [
+        "LangChain simplifies LLM application development.",
+        "pgvector adds vector search to PostgreSQL.",
+        "RAG grounds language models with external knowledge.",
+    ]
+
+
+    print("\n[Task 6] Cosine Similarity")
+    word_pairs = compare_word_pairs()
+    print(f"  dog vs puppy      : {word_pairs.get('dog_vs_puppy', ''):.4f}")
+    print(f"  dog vs automobile : {word_pairs.get('dog_vs_automobile', ''):.4f}")
+    print(f"  More similar      : {word_pairs.get('more_similar_pair')}")
+
+
+    print("\n[Task 7] Batch Embedding with Chunking")
+    chunk_info = batch_embed_with_chunks(SAMPLE_DOCUMENT, 200, 40)
+    print(f"  Chunks     : {chunk_info.get('num_chunks')}")
+    print(f"  Embed dims : {chunk_info.get('embedding_dim')}")
+
+
+    print("\n[Task 8] Compare Embedding Models")
+    model_cmp = compare_embedding_models("Vector databases power semantic search.")
+    print(f"  Model A dims : {model_cmp.get('model_a', {}).get('dims')}")
+    print(f"  Model B dims : {model_cmp.get('model_b', {}).get('dims')}")
+    print(f"  Dim ratio    : {model_cmp.get('dim_ratio')}")
+
+
+    # ── Section C ─────────────────────────────────────────────
+    print("\n── SECTION C: pgvector ────────────────────────────────\n")
+
+
+    docs_to_insert = [
+        ("LangChain enables LLM pipelines.", {"source": "docs", "page": 1}),
+        ("pgvector stores vector embeddings.", {"source": "docs", "page": 2}),
+        ("RAG retrieves relevant context.",   {"source": "paper", "page": 5}),
+        ("LangSmith traces LLM calls.",       {"source": "blog",  "page": 1}),
+    ]
+
+
+    # ── Section D ─────────────────────────────────────────────
+    print("\n── SECTION D: RAG Agents ──────────────────────────────\n")
+
+
+    print("[Task 14] Basic RAG Pipeline")
+    rag_ans = basic_rag_pipeline(RAG_DOCUMENTS, "What is LCEL?")
+    print(" ", rag_ans)
+
+
+    print("\n[Task 15] RAG with Source Attribution")
+    rag_src = rag_with_sources(RAG_DOCUMENTS, "What distance metrics does pgvector support?")
+    print("  Answer  :", rag_src.get("answer", ""))
+    print("  Sources :")
+    for s in rag_src.get("sources", []):
+        print(f"    [{s.get('score', 0):.4f}] {s.get('content', '')[:60]}")
+
+
+    print("\n[Task 16] Conversational RAG")
+    conv_answers = conversational_rag(RAG_DOCUMENTS)
+    print("  Turn 1:", conv_answers[0][:80] if conv_answers else "")
+    print("  Turn 2:", conv_answers[1][:80] if len(conv_answers) > 1 else "")
+
+
+    print("\n[Task 17] RAG Agent")
+    agent_ans = rag_agent("What distance metrics does pgvector support?")
+    print(" ", agent_ans)
+
+
+    # ── Section E ─────────────────────────────────────────────
+    print("\n── SECTION E: LangSmith ───────────────────────────────\n")
+
+
+    print("[Task 18] Traced Chain")
+    traced = traced_chain("embeddings")
+    print(f"  Answer : {str(traced.get('answer', ''))[:80]}")
+    print(f"  Run ID : {traced.get('run_id')}")
+
+
+    print("\n[Task 19] Create LangSmith Dataset")
+    dataset_id = create_langsmith_dataset()
+    print(f"  Dataset ID: {dataset_id}")
+
+
+    print("\n[Task 20] Run LangSmith Evaluation")
+    eval_summary = run_langsmith_evaluation()
+    print(f"  Dataset     : {eval_summary.get('dataset')}")
+    print(f"  # Examples  : {eval_summary.get('num_examples')}")
+    print(f"  Pass rate   : {eval_summary.get('pass_rate')}")
+
+
+    print("\n" + "=" * 60)
+    print("All tasks complete!")
+    print("=" * 60)
