@@ -170,18 +170,9 @@ def batch_embed_with_chunks(
         chunk_size=chunk_size,
         chunk_overlap=overlap
     )
-
     chunks = splitter.split_text(text)
-
-
-
-
     embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
     vectors = embeddings.embed_documents(chunks)
-
-
-
-
     return {
         "num_chunks": len(chunks),
         "chunk_size": chunk_size,
@@ -189,9 +180,6 @@ def batch_embed_with_chunks(
         "embedding_dim": len(vectors[0]),
         "chunks": chunks
     }
-
-
-
 
 
 """
@@ -222,24 +210,12 @@ HINT:
 
 
 from langchain_openai import OpenAIEmbeddings
-
-
-
-
 def compare_embedding_models(sentence: str) -> dict:
     """Embeds a sentence with two models and compares their dimensions."""
     model_a = OpenAIEmbeddings(model="text-embedding-3-small")
     model_b = OpenAIEmbeddings(model="text-embedding-3-large")
-
-
-
-
     vec_a = model_a.embed_query(sentence)
     vec_b = model_b.embed_query(sentence)
-
-
-
-
     return {
         "sentence": sentence,
         "model_a": {
@@ -305,15 +281,7 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 def basic_rag_pipeline(documents: list, question: str) -> str:
     embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
-
-
-
-
     docs = [Document(page_content=d) for d in documents]
-
-
-
-
     store = PGVector.from_documents(
         documents=docs,
         embedding=embeddings,
@@ -321,43 +289,19 @@ def basic_rag_pipeline(documents: list, question: str) -> str:
         connection_string=os.environ["PG_CONNECTION_STRING_RAW"],
         pre_delete_collection=True
     )
-
-
-
-
     retriever = store.as_retriever(search_kwargs={"k": 3})
-
-
-
-
     def format_docs(docs):
         return "\n\n".join(doc.page_content for doc in docs)
-
-
-
-
     prompt = ChatPromptTemplate.from_template(
         "Answer using only this context:\n{context}\n\nQuestion: {question}"
     )
-
-
-
-
     llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
-
-
-
-
     chain = (
         {"context": retriever | format_docs, "question": RunnablePassthrough()}
         | prompt
         | llm
         | StrOutputParser()
     )
-
-
-
-
     return chain.invoke(question)
    
 
@@ -387,81 +331,37 @@ HINT:
   # Then use the context in both the answer chain and as sources.
 """
 from langchain_core.runnables import RunnableParallel
-
-
-
-
 def rag_with_sources(documents: list, question: str) -> dict:
     embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
     docs = [Document(page_content=d) for d in documents]
-
-
-
-
     store = PGVector.from_documents(
         documents=docs,
         embedding=embeddings,
         collection_name="rag_sources",
         connection_string=os.environ["PG_CONNECTION_STRING_RAW"],
     )
-
-
-
-
     retriever = store.as_retriever(search_kwargs={"k": 3})
-
-
-
-
     def format_docs(docs):
         return "\n\n".join(doc.page_content for doc in docs)
-
-
-
-
     prompt = ChatPromptTemplate.from_template(
         "Answer using only this context:\n{context}\n\nQuestion: {question}"
     )
-
-
-
-
     llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
-
-
-
-
     generation_chain = (
         {"context": lambda x: format_docs(x["context"]), "question": lambda x: x["question"]}
         | prompt
         | llm
         | StrOutputParser()
     )
-
-
-
-
     retrieval_chain = RunnableParallel(
         {"context": retriever, "question": RunnablePassthrough()}
     )
-
-
-
-
     inputs = retrieval_chain.invoke(question)
     answer = generation_chain.invoke(inputs)
-
-
-
-
     sources = [
         {"content": doc.page_content}
         for doc in inputs["context"]
     ]
-
-
-
-
     return {"answer": answer, "sources": sources}
 
 
@@ -511,29 +411,16 @@ from langchain_core.runnables import RunnablePassthrough, RunnableLambda
 
 def conversational_rag(documents: list) -> list:
     """Returns [answer_turn1, answer_turn2] for a 2-turn RAG conversation."""
-
-
     embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
-
-
     docs = [Document(page_content=d) for d in documents]
-
-
-   
     store = PGVector.from_documents(
         documents=docs,
         embedding=embeddings,
         collection_name="rag_conversational",
         connection_string=os.environ["PG_CONNECTION_STRING_RAW"],
     )
-
-
     retriever = store.as_retriever(search_kwargs={"k": 3})
-
-
     llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
-
-
     rewrite_prompt = ChatPromptTemplate.from_template(
         """
 Given the chat history and the follow-up question,
@@ -588,8 +475,6 @@ Question:
 
 
     chat_history = []
-
-
     question_1 = "What is LangChain?"
     answer_1 = answer_chain.invoke(question_1)
 
@@ -603,8 +488,6 @@ Question:
 
 
     follow_up = "What version introduced LCEL?"
-
-
     standalone_question = rewrite_chain.invoke({
         "question": follow_up,
         "chat_history": chat_history,
@@ -742,15 +625,9 @@ def traced_chain(topic: str) -> dict:
     os.environ["LANGCHAIN_TRACING_V2"] = "true"
     os.environ["LANGCHAIN_PROJECT"] = "rag-challenge"
 
-
-
-
     llm = ChatOpenAI(model="gpt-4o-mini")
     prompt = ChatPromptTemplate.from_template("Explain {topic} briefly.")
     chain = prompt | llm | StrOutputParser()
-
-
-
 
     with collect_runs() as cb:
         answer = chain.invoke(
@@ -758,14 +635,7 @@ def traced_chain(topic: str) -> dict:
             config={"run_name": "task18_trace", "tags": ["challenge"]},
         )
 
-
-
-
     run_id = str(cb.traced_runs[0].id)
-
-
-
-
     return {"answer": answer, "run_id": run_id}
 
 
