@@ -680,3 +680,154 @@ Question:
 
     return [answer_1, answer_2]
 
+"""
+TASK 17: RAG Agent with Retriever as Tool
+-------------------------------------------
+Convert the vector store retriever into a LangChain Tool,
+then wrap it in a ReAct agent.  This lets the agent DECIDE
+when to retrieve rather than always retrieving.
+
+
+Steps:
+  1. Build a PGVector store from RAG_DOCUMENTS.
+  2. Wrap the retriever in a Tool named "knowledge_base".
+  3. Create a ReAct agent with that tool.
+  4. Ask: "What distance metrics does pgvector support?"
+  5. Return the final answer string.
+
+
+HINT:
+  from langchain.tools.retriever import create_retriever_tool
+  retriever_tool = create_retriever_tool(
+      retriever,
+      name="knowledge_base",
+      description="Search the knowledge base for technical info."
+  )
+  Then pass [retriever_tool] to create_react_agent.
+"""
+import os
+from typing import List
+
+
+from langchain_openai import ChatOpenAI, OpenAIEmbeddings
+from langchain_core.documents import Document
+from langchain_core.tools import tool
+from langchain.agents import create_agent
+from langchain_community.vectorstores.pgvector import PGVector
+
+
+def rag_agent(question: str) -> str:
+    embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
+    docs = [Document(page_content=d) for d in RAG_DOCUMENTS]
+
+
+    store = PGVector.from_documents(
+        documents=docs,
+        embedding=embeddings,
+        collection_name="rag_agent",
+        connection_string=os.environ["PG_CONNECTION_STRING_RAW"],
+        pre_delete_collection=True,
+    )
+
+
+    retriever = store.as_retriever()
+
+
+    @tool
+    def knowledge_base(query: str) -> str:
+        """Search the knowledge base for technical information."""
+        docs = retriever.invoke(query)
+        return "\n\n".join(d.page_content for d in docs)
+
+
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
+
+
+    agent = create_agent(
+        llm,
+        tools=[knowledge_base],
+    )
+
+
+    result = agent.invoke({
+        "messages": [
+            {"role": "user", "content": question}
+        ]
+    })
+    if "output" in result:
+        return result["output"]
+
+
+    if "messages" in result and len(result["messages"]) > 0:
+        last_message = result["messages"][-1]
+        return (
+        last_message["content"]
+        if isinstance(last_message, dict)
+        else last_message.content
+        )
+
+
+    raise ValueError("Agent did not return a valid response")
+
+
+"""
+TASK 18: LangSmith Tracing
+-----------------------------
+Instrument a simple LCEL chain so every invocation is
+traced in LangSmith.  Your function should:
+  1. Set LANGCHAIN_TRACING_V2=true and LANGCHAIN_PROJECT.
+  2. Build the same basic LCEL chain from Task 1.
+  3. Add run_name and tags to the invocation config.
+  4. Return the response AND the run_id of the trace.
+
+
+Expected return:
+  {"answer": str, "run_id": str}
+
+
+HINT:
+  from langchain_core.tracers.context import collect_runs
+
+
+  with collect_runs() as cb:
+      result = chain.invoke(
+          {"topic": topic},
+          config={"run_name": "task18_trace", "tags": ["challenge"]}
+      )
+  run_id = str(cb.traced_runs[0].id)
+"""
+import os
+from langchain_core.tracers.context import collect_runs
+
+
+
+
+def traced_chain(topic: str) -> dict:
+    os.environ["LANGCHAIN_TRACING_V2"] = "true"
+    os.environ["LANGCHAIN_PROJECT"] = "rag-challenge"
+
+
+
+
+    llm = ChatOpenAI(model="gpt-4o-mini")
+    prompt = ChatPromptTemplate.from_template("Explain {topic} briefly.")
+    chain = prompt | llm | StrOutputParser()
+
+
+
+
+    with collect_runs() as cb:
+        answer = chain.invoke(
+            {"topic": topic},
+            config={"run_name": "task18_trace", "tags": ["challenge"]},
+        )
+
+
+
+
+    run_id = str(cb.traced_runs[0].id)
+
+
+
+
+    return {"answer": answer, "run_id": run_id}
